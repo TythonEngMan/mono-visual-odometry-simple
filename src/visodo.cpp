@@ -1,4 +1,5 @@
 #include "vo_features.h"
+#include "helper.h"
 
 using namespace cv;
 using namespace std;
@@ -6,50 +7,12 @@ using namespace std;
 #define MAX_FRAME 1000
 #define MIN_NUM_FEAT 500
 
-// IMP: Change the file directories (4 places) according to where your dataset is saved before running!
-
-double getAbsoluteScale(int frame_id, int sequence_id, double z_cal)	{
-  
-  string line;
-  int i = 0;
-  ifstream myfile ("/home/yokota/data/kitti/data_odometry_poses/dataset/poses/00.txt");
-  double x =0, y=0, z = 0;
-  double x_prev, y_prev, z_prev;
-  if (myfile.is_open())
-  {
-    while (( getline (myfile,line) ) && (i<=frame_id))
-    {
-      z_prev = z;
-      x_prev = x;
-      y_prev = y;
-      std::istringstream in(line);
-      //cout << line << '\n';
-      for (int j=0; j<12; j++)  {
-        in >> z ;
-        if (j==7) y=z;
-        if (j==3)  x=z;
-      }
-      
-      i++;
-    }
-    myfile.close();
-  }
-
-  else {
-    cout << "Unable to open file";
-    return 0;
-  }
-
-  return sqrt((x-x_prev)*(x-x_prev) + (y-y_prev)*(y-y_prev) + (z-z_prev)*(z-z_prev)) ;
-
-}
-
-
 int main( int argc, char** argv )	{
 
   // 出力ファイル設定
   ofstream myfile;
-  myfile.open ("results1_1.txt");
+  myfile.open ("results1_1.csv");
+  myfile << "dlt_r_x, dlt_r_y, dlt_r_z, ref_dlt_r_x, ref_dlt_r_y, ref_dlt_r_z" << endl;
 
   // Parameter
   double focal = 718.8560;
@@ -94,14 +57,15 @@ int main( int argc, char** argv )	{
   	featureTracking(prevImage, currImage, prevFeatures, currFeatures, status);
   	E = findEssentialMat(currFeatures, prevFeatures, focal, pp, RANSAC, 0.999, 1.0, mask);
   	recoverPose(E, currFeatures, prevFeatures, R, t, focal, pp, mask);
-  	double scale = getAbsoluteScale(numFrame, 0, t.at<double>(2));
+  	double scale = 0.8;//getAbsoluteScale(numFrame, 0, t.at<double>(2));
     if ((scale>0.1)&&(t.at<double>(2) > t.at<double>(0)) && (t.at<double>(2) > t.at<double>(1))) {
       t_f = t_f + scale*(R_f*t);
       R_f = R*R_f;
     } else {
      //cout << "scale below 0.1, or incorrect translation" << endl;
     }
-    
+
+
     // トラッキングしている特徴点が少ない場合は再抽出＆トラッキング
  	  if (prevFeatures.size() < MIN_NUM_FEAT)	{
  		  featureDetection(prevImage, prevFeatures);
@@ -110,12 +74,14 @@ int main( int argc, char** argv )	{
 
     prevImage = currImage.clone();
     prevFeatures = currFeatures;
-
+    
     // ターミナル出力用
     clock_t end = clock();
     const double elapsed_secs = static_cast<double>(end - begin) / CLOCKS_PER_SEC * 1000.0;
     cout << "Elapsed time: " << elapsed_secs << "ms" << endl;
-    
+    // cout << "Scale is " << scale << endl;
+
+
     // 描画用
     int x = int(t_f.at<double>(0)) + 300;
     int y = int(t_f.at<double>(2)) + 100;
@@ -128,9 +94,16 @@ int main( int argc, char** argv )	{
     imshow( "Road facing camera", currImage );
     imshow( "Trajectory", traj );
     waitKey(1);
-    // cout << "Scale is " << scale << endl;
+    
     // lines for printing results
-    //  myfile << t_f.at<double>(0) << " " << t_f.at<double>(1) << " " << t_f.at<double>(2) << endl;
+    // myfile << t_f.at<double>(0) << " " << t_f.at<double>(1) << " " << t_f.at<double>(2) << endl;
+    
+    // double ref_dlt_r_x, ref_dlt_r_y, ref_dlt_r_z;
+    // double est_dlt_r_x, est_dlt_r_y, est_dlt_r_z;
+    // transformRotationMatrixToEuler(R, est_dlt_r_x, est_dlt_r_y, est_dlt_r_z);
+    // getReferenceDltAngle(numFrame, ref_dlt_r_x, ref_dlt_r_y, ref_dlt_r_z);
+    // myfile << est_dlt_r_x << "," << est_dlt_r_y << "," << est_dlt_r_z << "," << ref_dlt_r_x << "," << ref_dlt_r_y << "," << ref_dlt_r_z << endl;
+
   }
   return 0;
 }
